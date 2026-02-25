@@ -166,6 +166,25 @@ function buildSchedule(data: HorarioItem[]): Record<string, Record<number, Sched
   return grid;
 }
 
+function buildMobileByDay(data: HorarioItem[]): Record<string, HorarioItem[]> {
+  const byDay: Record<string, HorarioItem[]> = {};
+  DAYS.forEach(day => { byDay[day] = []; });
+
+  data.forEach(item => {
+    if (!byDay[item.dia]) return;
+    const exists = byDay[item.dia].some(
+      c => c.materia === item.materia && c.curso === item.curso && c.horaInicio === item.horaInicio
+    );
+    if (!exists) byDay[item.dia].push(item);
+  });
+
+  DAYS.forEach(day => {
+    byDay[day].sort((a, b) => timeToMinutes(a.horaInicio) - timeToMinutes(b.horaInicio));
+  });
+
+  return byDay;
+}
+
 export default function HorariosApp() {
   const [especialidad, setEspecialidad] = useState('');
   const [allData, setAllData] = useState<HorarioItem[]>([]);
@@ -190,6 +209,7 @@ export default function HorariosApp() {
   });
 
   const schedule = buildSchedule(filteredData);
+  const mobileByDay = buildMobileByDay(filteredData);
   const years = [...new Set(allData.map(d => d.year))].sort();
   const comisiones = [...new Set(allData.map(d => d.curso))].sort();
   const selectedLabel = ESPECIALIDADES.find(e => e.value === especialidad)?.label ?? '';
@@ -341,46 +361,77 @@ export default function HorariosApp() {
               </div>
             </div>
 
-            <div className="timetable-container">
-              <div className="timetable">
-                <div className="timetable-header corner">Hora</div>
-                {DAYS.map(day => (
-                  <div key={day} className="timetable-header">{day}</div>
-                ))}
+            {/* Vista desktop: timetable grid */}
+            <div className="desktop-view">
+              <div className="timetable-container">
+                <div className="timetable">
+                  <div className="timetable-header corner">Hora</div>
+                  {DAYS.map(day => (
+                    <div key={day} className="timetable-header">{day}</div>
+                  ))}
 
-                {TIME_SLOTS.map((slot, slotIndex) => (
-                  <React.Fragment key={slotIndex}>
-                    <div className="time-slot">
-                      {slot.start}<br />{slot.end}
-                    </div>
-                    {DAYS.map(day => (
-                      <div key={day} className="timetable-cell">
-                        {schedule[day][slotIndex]
-                          .filter(c => c.isStart)
-                          .map((course, i) => (
-                            <div
-                              key={i}
-                              className={`course-block year-${course.year}`}
-                              onMouseEnter={e => setTooltip({ visible: true, x: e.clientX + 15, y: e.clientY + 15, course })}
-                              onMouseLeave={() => setTooltip(t => ({ ...t, visible: false }))}
-                              onMouseMove={e => {
-                                const x = Math.min(e.clientX + 15, window.innerWidth - 300);
-                                const y = Math.min(e.clientY + 15, window.innerHeight - 130);
-                                setTooltip(t => ({ ...t, x, y }));
-                              }}
-                            >
-                              <div className="course-name">{shortenMateria(course.materia)}</div>
-                              <div className="course-info">
-                                <span className="course-code">{course.curso}</span>
-                                <span className="course-time">{course.horaInicio}-{course.horaFin}</span>
-                              </div>
-                            </div>
-                          ))}
+                  {TIME_SLOTS.map((slot, slotIndex) => (
+                    <React.Fragment key={slotIndex}>
+                      <div className="time-slot">
+                        {slot.start}<br />{slot.end}
                       </div>
-                    ))}
-                  </React.Fragment>
-                ))}
+                      {DAYS.map(day => (
+                        <div key={day} className="timetable-cell">
+                          {schedule[day][slotIndex]
+                            .filter(c => c.isStart)
+                            .map((course, i) => (
+                              <div
+                                key={i}
+                                className={`course-block year-${course.year}`}
+                                onMouseEnter={e => setTooltip({ visible: true, x: e.clientX + 15, y: e.clientY + 15, course })}
+                                onMouseLeave={() => setTooltip(t => ({ ...t, visible: false }))}
+                                onMouseMove={e => {
+                                  const x = Math.min(e.clientX + 15, window.innerWidth - 300);
+                                  const y = Math.min(e.clientY + 15, window.innerHeight - 130);
+                                  setTooltip(t => ({ ...t, x, y }));
+                                }}
+                              >
+                                <div className="course-name">{shortenMateria(course.materia)}</div>
+                                <div className="course-info">
+                                  <span className="course-code">{course.curso}</span>
+                                  <span className="course-time">{course.horaInicio}-{course.horaFin}</span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </div>
               </div>
+            </div>
+
+            {/* Vista mobile: cards por día */}
+            <div className="mobile-view">
+              {DAYS.map(day => {
+                const courses = mobileByDay[day];
+                if (courses.length === 0) return null;
+                return (
+                  <div key={day} className="mobile-day">
+                    <h3 className="mobile-day-title">{day}</h3>
+                    <div className="mobile-courses">
+                      {courses.map((course, i) => (
+                        <div key={i} className={`mobile-card year-${course.year}`}>
+                          <div className="mobile-card-time">
+                            {course.horaInicio} – {course.horaFin}
+                          </div>
+                          <div className="mobile-card-name">{course.materia}</div>
+                          <div className="mobile-card-meta">
+                            <span className="mobile-card-badge">{course.year}° Año</span>
+                            <span className="mobile-card-badge">{course.curso}</span>
+                            <span className="mobile-card-badge">{DICTADO_LABELS[course.dictado] ?? course.dictado}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
